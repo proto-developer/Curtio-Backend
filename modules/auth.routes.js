@@ -21,6 +21,10 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ success: false, message: "All fields are required." });
     }
 
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, message: "Password must be at least 8 characters long." });
+    }
+
     // Check if email already exists
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing && existing.isVerified) {
@@ -272,6 +276,9 @@ router.post("/reset-password", async (req, res) => {
     const { email, otp, password } = req.body;
     if (!email || !otp || !password) {
       return res.status(400).json({ success: false, message: "Email, OTP and new password are required." });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ success: false, message: "Password must be at least 8 characters long." });
     }
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) return res.status(404).json({ success: false, message: "User not found." });

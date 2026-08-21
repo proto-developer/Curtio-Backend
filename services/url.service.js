@@ -1,5 +1,4 @@
 const User = require("../models/User");
-const OwnerPreClick = require("../models/OwnerPreClick");
 const { isOwner } = require("../config/owners");
 const validator = require("validator");
 
