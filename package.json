@@ -6,9 +6,9 @@
   "scripts": {
     "test": "jest --ci --runInBand",
     "test:report": "jest --json --outputFile=test-report.json && node generate-report.js",
-    
     "start": "node server.js",
-    "dev": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first nodemon server.js"
+    "dev": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first nodemon server.js",
+    "prepare": "husky"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "cross-env": "^10.1.0",
+    "husky": "^9.1.7",
     "jest": "^30.4.2",
     "nodemon": "^3.1.14",
     "supertest": "^7.2.2"
