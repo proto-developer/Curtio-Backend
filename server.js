@@ -60,8 +60,13 @@ app.get("/api/dashboard", authMiddleware, (req, res) => {
 /* ── URL Routes (Protected) ── */
 app.use("/api/urls", authMiddleware, urlRoutes);
 
+/* ── Public Password Verify Route ── */
+// Called by the /password/:shortCode page in the SPA when a visitor submits the
+// password for a protected link. Must stay public — the visitor has no account.
+app.post("/api/public/verify/:shortCode", urlController.verifyLinkPassword);
+
 /* ── Public Click-Track Route ── */
-// Called by the loader page JS after the 3-second countdown fires.
+// Called by the loader page JS once its redirect countdown fires.
 // No auth required — the short code is the only identifier needed.
 app.post("/api/track/:shortCode", urlController.trackClick);
 

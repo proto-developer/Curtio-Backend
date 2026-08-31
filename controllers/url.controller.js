@@ -1,5 +1,6 @@
 const urlService = require("../services/url.service");
 const { isOwner } = require("../config/owners");
+const { REDIRECT_DELAY_MS } = require("../config/redirectTiming");
 
 const createShortUrl = async (req, res) => {
   try {
@@ -77,6 +78,25 @@ const toggleUrlActive = async (req, res) => {
 };
 
 /**
+ * The SPA origin visitors are sent to for the password page and error links.
+ * Trailing slashes are stripped so FRONT_END_URL="https://host/" cannot produce
+ * a "https://host//password/abc" style double slash.
+ */
+function getFrontendUrl() {
+  return (process.env.FRONT_END_URL || "http://localhost:5173").replace(/\/+$/, "");
+}
+
+/**
+ * Absolute origin of this redirect host, taken from the incoming request so it
+ * works on redirect.curtio.io, localhost, and previews without extra config.
+ */
+function getSelfOrigin(req) {
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] || req.get("host");
+  return `${proto}://${host}`;
+}
+
+/**
  * Direct redirect — resolves the short URL, records the click, and
  * immediately redirects the visitor to the original destination.
  * No captcha or intermediate page required.
@@ -88,11 +108,13 @@ const handleRedirect = async (req, res) => {
     // Only validates the link — does NOT record a click
     const urlObj = await urlService.resolveShortUrl(shortCode, {
       enteredPassword: null,
+      passwordGrant: req.query.grant || null,
     });
 
-    // Forward query params to destination so UTM tracking works on the target page
+    // Forward query params to destination so UTM tracking works on the target
+    // page. `grant` is ours — it must never be appended to the destination.
     let destinationUrl = urlObj.originalUrl;
-    const queryParams = req.query;
+    const { grant, ...queryParams } = req.query;
     if (queryParams && Object.keys(queryParams).length > 0) {
       try {
         const urlObjParsed = new URL(destinationUrl);
@@ -120,8 +142,7 @@ const handleRedirect = async (req, res) => {
     return res.status(200).send(buildRedirectPage(destinationUrl, shortCode, utmSource, apiBase, originalReferer));
   } catch (error) {
     if (error.passwordRequired) {
-      const frontendUrl = process.env.FRONT_END_URL || "http://localhost:5173";
-      return res.redirect(302, `${frontendUrl}/password/${shortCode}`);
+      return res.redirect(302, `${getFrontendUrl()}/password/${shortCode}`);
     }
 
     const isDisabled = error.message && error.message.includes("disabled by the owner");
@@ -135,7 +156,7 @@ const handleRedirect = async (req, res) => {
 
     const badgeText = isDisabled ? "Deactivated" : isExpired ? "Expired" : "404 Not Found";
 
-    const frontendUrl = process.env.FRONT_END_URL || "http://localhost:5173";
+    const frontendUrl = getFrontendUrl();
 
     return res.status(404).send(buildLinkDisabledPage({
       title,
@@ -147,8 +168,44 @@ const handleRedirect = async (req, res) => {
 };
 
 /**
+ * POST /api/public/verify/:shortCode
+ * Public — called by the password page when a visitor submits a password for a
+ * protected link. On success it returns the URL to continue to, carrying a
+ * short-lived grant so the normal loader/track/redirect flow can run.
+ */
+const verifyLinkPassword = async (req, res) => {
+  const { shortCode } = req.params;
+  const password = req.body?.password ?? "";
+
+  try {
+    const { grant, isProtected } = await urlService.verifyLinkPassword(shortCode, password);
+
+    const base = `${getSelfOrigin(req)}/${encodeURIComponent(shortCode)}`;
+    const redirectUrl = isProtected
+      ? `${base}?grant=${encodeURIComponent(grant)}`
+      : base;
+
+    return res.status(200).json({ success: true, redirectUrl });
+  } catch (error) {
+    if (error.invalidPassword) {
+      return res.status(401).json({
+        success: false,
+        passwordRequired: true,
+        message: "Incorrect password. Please try again.",
+      });
+    }
+
+    const notFound = error.message && error.message.includes("not found");
+    return res.status(notFound ? 404 : 410).json({
+      success: false,
+      message: error.message || "This link is currently unavailable.",
+    });
+  }
+};
+
+/**
  * POST /api/track/:shortCode
- * Called by the loader page JS after the 3-second countdown completes.
+ * Called by the loader page JS once its countdown (REDIRECT_DELAY_MS) completes.
  * This is the ONLY place a click is recorded.
  */
 const trackClick = async (req, res) => {
@@ -289,7 +346,7 @@ function buildRedirectPage(destinationUrl, shortCode, utmSource, apiBase, origin
       try { preClickXhr.send(preClickPayload); } catch(e) {}
     }
 
-    // Track the click ONLY after the full 3-second countdown fires.
+    // Track the click ONLY after the countdown fires.
     setTimeout(function () {
       var trackUrl = apiHost + "/api/track/${safeCode}";
       var payload = JSON.stringify({ visitId: visitId, utmSource: "${safeUtm}", originalReferer: "${safeReferer}" });
@@ -305,7 +362,7 @@ function buildRedirectPage(destinationUrl, shortCode, utmSource, apiBase, origin
       }
 
       window.location.replace("${safeUrl}");
-    }, 3000);
+    }, ${REDIRECT_DELAY_MS});
   })();
 </script>
 </body>
@@ -560,6 +617,7 @@ module.exports = {
   deleteUrl,
   toggleUrlActive,
   handleRedirect,
+  verifyLinkPassword,
   trackClick,
   trackPreClick,
   updateUrlLabels,
