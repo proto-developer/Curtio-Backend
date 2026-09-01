@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const { isOwner } = require("../config/owners");
+const { hasUnlimitedLinks, FREE_LINK_LIMIT } = require("../config/premium");
 const { PRECLICK_WINDOW_MS } = require("../config/redirectTiming");
 const validator = require("validator");
 const crypto = require("crypto");
@@ -99,6 +100,20 @@ const addShortUrl = async (userId, { originalUrl, customAlias, password, expires
   const user = await User.findById(userId);
   if (!user) {
     throw new Error("User not found.");
+  }
+
+  // 2b. Plan quota — Free holds FREE_LINK_LIMIT link(s); subscribers AND owners
+  //     are unlimited (owners run the tool, they don't buy their own product).
+  //     This is the ONLY thing a subscription changes. Pre-click analytics stay
+  //     owner-only (config/owners.js) — paying never grants them.
+  //     Existing links keep working; only creating a new one is blocked.
+  const unlimited = await hasUnlimitedLinks(user.email);
+  if (!unlimited && user.urls.length >= FREE_LINK_LIMIT) {
+    const err = new Error(
+      `Free includes ${FREE_LINK_LIMIT} link per user. Upgrade to Plus for unlimited tracked links.`
+    );
+    err.planLimitReached = true;
+    throw err;
   }
 
   // 3. Resolve short code (custom alias or unique generated)
