@@ -1,6 +1,48 @@
 const User = require("../models/User");
 const { isOwner } = require("../config/owners");
+const { hasUnlimitedLinks, FREE_LINK_LIMIT } = require("../config/premium");
+const { PRECLICK_WINDOW_MS } = require("../config/redirectTiming");
 const validator = require("validator");
+const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
+
+/**
+ * Password grants.
+ *
+ * A visitor who enters the correct password for a protected link gets a
+ * short-lived signed grant instead of the password being replayed in the URL.
+ * The grant is stateless (HMAC-signed) so it survives across serverless
+ * instances — an in-memory store would break whenever the verify request and
+ * the follow-up redirect land on different instances.
+ */
+const PASSWORD_GRANT_TTL_SECONDS = 120;
+const PASSWORD_GRANT_SCOPE = "link_password";
+
+function issuePasswordGrant(shortCode) {
+  return jwt.sign(
+    { shortCode, scope: PASSWORD_GRANT_SCOPE },
+    process.env.JWT_SECRET,
+    { expiresIn: PASSWORD_GRANT_TTL_SECONDS }
+  );
+}
+
+function isValidPasswordGrant(shortCode, token) {
+  if (!token) return false;
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    return payload.scope === PASSWORD_GRANT_SCOPE && payload.shortCode === shortCode;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Constant-time string compare, so a wrong password cannot be timed out character by character. */
+function safeEquals(a, b) {
+  const bufA = Buffer.from(String(a ?? ""), "utf8");
+  const bufB = Buffer.from(String(b ?? ""), "utf8");
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 /**
  * Generate a random short code of a given length.
@@ -58,6 +100,20 @@ const addShortUrl = async (userId, { originalUrl, customAlias, password, expires
   const user = await User.findById(userId);
   if (!user) {
     throw new Error("User not found.");
+  }
+
+  // 2b. Plan quota — Free holds FREE_LINK_LIMIT link(s); subscribers AND owners
+  //     are unlimited (owners run the tool, they don't buy their own product).
+  //     This is the ONLY thing a subscription changes. Pre-click analytics stay
+  //     owner-only (config/owners.js) — paying never grants them.
+  //     Existing links keep working; only creating a new one is blocked.
+  const unlimited = await hasUnlimitedLinks(user.email);
+  if (!unlimited && user.urls.length >= FREE_LINK_LIMIT) {
+    const err = new Error(
+      `Free includes ${FREE_LINK_LIMIT} link per user. Upgrade to Plus for unlimited tracked links.`
+    );
+    err.planLimitReached = true;
+    throw err;
   }
 
   // 3. Resolve short code (custom alias or unique generated)
@@ -261,7 +317,7 @@ function isWebBrowser(userAgent, headers = {}) {
  * Call this when serving the loader page so that closing the tab early
  * does not inflate click counts.
  */
-const resolveShortUrl = async (shortCode, { enteredPassword } = {}) => {
+const resolveShortUrl = async (shortCode, { enteredPassword, passwordGrant } = {}) => {
   const user = await User.findOne({ "urls.shortCode": shortCode });
   if (!user) {
     throw new Error("Short URL not found.");
@@ -280,14 +336,63 @@ const resolveShortUrl = async (shortCode, { enteredPassword } = {}) => {
     throw new Error("This link has expired.");
   }
 
-  // Check password protection if enabled
-  if (urlObj.password && urlObj.password !== enteredPassword) {
-    const err = new Error("Password required.");
-    err.passwordRequired = true;
-    throw err;
+  // Check password protection if enabled. The visitor is let through either by
+  // supplying the password directly or by presenting a grant issued by
+  // verifyLinkPassword after they entered it on the password page.
+  if (urlObj.password) {
+    const unlocked =
+      (enteredPassword !== null &&
+        enteredPassword !== undefined &&
+        safeEquals(urlObj.password, enteredPassword)) ||
+      isValidPasswordGrant(shortCode, passwordGrant);
+
+    if (!unlocked) {
+      const err = new Error("Password required.");
+      err.passwordRequired = true;
+      throw err;
+    }
   }
 
   return urlObj;
+};
+
+/**
+ * Verify the password a visitor typed on the password page.
+ * Returns a short-lived grant that resolveShortUrl accepts, so the normal
+ * loader → pre-click → track → redirect flow runs unchanged afterwards and
+ * password-protected links keep producing analytics.
+ */
+const verifyLinkPassword = async (shortCode, enteredPassword) => {
+  const user = await User.findOne({ "urls.shortCode": shortCode });
+  if (!user) {
+    throw new Error("Short URL not found.");
+  }
+
+  const urlObj = user.urls.find((u) => u.shortCode === shortCode);
+  if (!urlObj) {
+    throw new Error("Short URL not found.");
+  }
+
+  if (!urlObj.active) {
+    throw new Error("This link has been disabled by the owner.");
+  }
+
+  if (urlObj.expiresAt && new Date() > new Date(urlObj.expiresAt)) {
+    throw new Error("This link has expired.");
+  }
+
+  // Not protected — nothing to verify, the plain redirect already works.
+  if (!urlObj.password) {
+    return { grant: null, isProtected: false };
+  }
+
+  if (!safeEquals(urlObj.password, enteredPassword)) {
+    const err = new Error("Incorrect password.");
+    err.invalidPassword = true;
+    throw err;
+  }
+
+  return { grant: issuePasswordGrant(shortCode), isProtected: true };
 };
 
 // In-memory cache for temporary preCheck/postCheck session tracking
@@ -356,7 +461,7 @@ async function finalizePreClick(visitId) {
 
 /**
  * Record a click for a short URL.
- * Called by the loader page JS after the 3-second countdown completes.
+ * Called by the loader page JS once its redirect countdown completes.
  */
 const trackClick = async (shortCode, { ip, userAgent, headers, utmSource, originalReferer, visitId }) => {
   const ua = userAgent || "";
@@ -437,10 +542,11 @@ const trackPreClick = async (shortCode, { ip, userAgent, headers, utmSource, ori
     visitId = 'v_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
   }
 
-  // 3.5-second window: if postCheck isn't set to true within 3.5 seconds (after 3s redirect timer), user closed tab early
+  // If postCheck isn't set to true within PRECLICK_WINDOW_MS (the loader's
+  // redirect delay plus a grace period), the visitor closed the tab early.
   const timer = setTimeout(() => {
     finalizePreClick(visitId);
-  }, 3500);
+  }, PRECLICK_WINDOW_MS);
 
   pendingVisits.set(visitId, {
     shortCode,
@@ -685,6 +791,7 @@ module.exports = {
   validateUrl,
   addShortUrl,
   resolveShortUrl,
+  verifyLinkPassword,
   trackClick,
   trackPreClick,
   getUserUrls,
