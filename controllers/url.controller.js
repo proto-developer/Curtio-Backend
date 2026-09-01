@@ -1,5 +1,6 @@
 const urlService = require("../services/url.service");
 const { isOwner } = require("../config/owners");
+const { getPremiumStatus, hasUnlimitedLinks, FREE_LINK_LIMIT } = require("../config/premium");
 const { REDIRECT_DELAY_MS } = require("../config/redirectTiming");
 
 const createShortUrl = async (req, res) => {
@@ -25,7 +26,13 @@ const createShortUrl = async (req, res) => {
     });
   } catch (error) {
     console.error("Create short URL error:", error);
-    return res.status(400).json({ success: false, message: error.message });
+    // planLimitReached lets the client tell "you hit the Free quota" apart from
+    // a validation failure. Status stays 400 so existing error handling works.
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+      ...(error.planLimitReached ? { planLimitReached: true } : {}),
+    });
   }
 };
 
@@ -42,7 +49,28 @@ const getMyUrls = async (req, res) => {
         delete safeUrl.preClickLogs;
         return safeUrl;
       });
-    return res.status(200).json({ success: true, urls: responseUrls, labels });
+    // Live plan flags, read on every load so adding or removing a subscription
+    // takes effect without a re-login (the JWT claim is only a login snapshot).
+    //   isPremium      → has a paid subscription
+    //   unlimitedLinks → may hold unlimited links (subscriber OR owner)
+    // Owners are unlimited without paying, so the two differ for them.
+    const [planStatus, unlimitedLinks] = await Promise.all([
+      getPremiumStatus(req.user.email),
+      hasUnlimitedLinks(req.user.email),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      urls: responseUrls,
+      labels,
+      isPremium: planStatus.isPremium,
+      unlimitedLinks,
+      freeLinkLimit: FREE_LINK_LIMIT,
+      // "none" = never subscribed. Anything else means a record exists, so the
+      // UI can say "your subscription expired" instead of "free plan".
+      subscriptionStatus: planStatus.status,
+      subscriptionExpiresAt: planStatus.expiresAt,
+    });
   } catch (error) {
     console.error("Get URLs error:", error);
     return res.status(500).json({ success: false, message: error.message });
