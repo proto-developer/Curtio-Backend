@@ -1,0 +1,17 @@
+.gcloudignore
+.git
+.gitignore
+.github
+
+node_modules
+npm-debug.log
+*.log
+
+.env
+.env.*
+
+.husky
+tests
+test-db.js
+test-report.json
+generate-report.js
