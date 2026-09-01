@@ -25,6 +25,15 @@ const connectDB = async () => {
 
     isConnected = db.connections[0].readyState === 1;
     console.log("MongoDB Connected Successfully");
+
+    // One-off cleanup: remove the legacy TTL index that deleted lapsed
+    // subscriptions. No-op once it is gone. Never blocks startup.
+    try {
+      const { dropExpiryTtlIndex } = require("../models/Subscription");
+      await dropExpiryTtlIndex();
+    } catch (err) {
+      console.error("Subscription index cleanup skipped:", err.message);
+    }
   } catch (error) {
     console.error("Error while connecting to MongoDB", error);
     throw error;
