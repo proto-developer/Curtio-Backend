@@ -14,7 +14,7 @@
 const REDIRECT_DELAY_MS = 1000;
 
 // Headroom for the track request to reach the server after the countdown fires.
-const PRECLICK_GRACE_MS = 500;
+const PRECLICK_GRACE_MS = 1000;
 
 const PRECLICK_WINDOW_MS = REDIRECT_DELAY_MS + PRECLICK_GRACE_MS;
 
