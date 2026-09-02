@@ -42,7 +42,7 @@ app.use(async (req, res, next) => {
 
 /* ── Health Check ── */
 app.get("/", (req, res) => {
-  res.json({ success: true, message: "Curtio is Live! [prod-test-0902]" });
+  res.json({ success: true, message: "Curtio is Live! [prod-test-0902-1605]" });
 });
 
 /* ── Auth Routes ── */
