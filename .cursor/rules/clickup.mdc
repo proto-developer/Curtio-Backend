@@ -1,0 +1,66 @@
+---
+description: Prefer ClickUp tracking for Curtio work — link or create a task when practical, do not block casual coding
+alwaysApply: true
+---
+
+# ClickUp workflow
+
+Prefer tracking Curtio work in ClickUp when the task is non-trivial (feature, bug fix, refactor, deploy). Do **not** block coding if ClickUp MCP is unavailable, the user says `skip clickup`, or the change is tiny (typo, one-line fix, local experiment).
+
+## Where tasks live
+
+- Space: **proto-it** (`1100360000002477`)
+- Default list: **Curtio** (`1100360000003094`)
+- Prefix titles with **`[Backend]`** in this repo (`[Frontend]` only if the work is clearly frontend-only).
+
+## 1. Assess when starting real work
+
+1. Search with `clickup_search` or `clickup_filter_tasks` (feature, route, error, files).
+2. Prefer the **Curtio** list; search the workspace if nothing matches.
+3. Tell the user the task name + URL, or that none exists.
+
+If MCP fails, note it briefly and continue.
+
+## 2. If a task exists
+
+- Share the URL before or as you start coding.
+- Set status **`in progress`** and **`start_date`** (if missing).
+- Comment with findings, PR/branch links, and blockers as you go.
+
+## 3. If none exists (non-trivial work)
+
+Create on the **Curtio** list:
+
+- Title like `[Backend] Fix login token refresh`
+- Status `in progress`, `start_date` = now
+- Description with the Timing block + issue/scope
+- Share the URL, then continue
+
+## 4. Close the loop
+
+When the work is **verified complete** (not merely pushed):
+
+- Status **`staging`**
+- **`due_date`** = finish time (UTC+5)
+- Update Timing: Started / Finished / Duration
+- Add a short summary and PR/branch links if any
+
+Do not set `time_estimate` unless asked.
+
+## Timing block (required at top of description)
+
+- **Started:** `YYYY-MM-DD HH:MM` (UTC+5)
+- **Finished:** fill when done
+- **Duration:** e.g. `~25 minutes`
+
+Status flow on this list: `to do` → `in progress` → `staging`.
+
+`staging` means verified on GitHub **`main`** (staging), not live on **`prod`**.
+
+## `/pr` command
+
+When the user runs **`/pr`** (see `.cursor/commands/pr.md`):
+
+1. Prefer linking or creating a ClickUp task; include the task URL in the PR body when one exists.
+2. Link PR URL, branch, and commit SHA on the task when ClickUp is available.
+3. Keep status **`in progress`** while the PR is open. Mark **`staging`** only after the work is verified (or the user confirms merge) — opening a PR is not completion.

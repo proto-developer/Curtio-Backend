@@ -1,0 +1,19 @@
+---
+description: Jest tests for Curtio Backend
+globs: "{tests/**,**/jest*.js,scripts/generate-report.js,scripts/test-db.js}"
+alwaysApply: false
+---
+
+# Backend testing
+
+- Tests: Jest via `npm test` (`jest --ci --runInBand`).
+- Specs live under `tests/` by domain (e.g. `tests/auth/login.test.js`, `tests/urls/url.test.js`).
+- Do not remove existing tests. Extend them.
+- Cover the behavior you changed, plus the obvious failure path (validation error, unauthorized, not found).
+- Prefer isolated tests; do not hit production Mongo or external SMTP. Use test env / mocks as the suite already does.
+- Optional: `npm run test:report` for a generated report; `npm run db:ping` for connectivity checks.
+
+```javascript
+// ❌ BAD — deleting a failing test to ship
+// ✅ GOOD — extend tests/auth/login.test.js with the new case
+```

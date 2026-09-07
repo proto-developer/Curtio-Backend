@@ -2,18 +2,23 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "test": "jest --ci --runInBand",
-    "test:report": "jest --json --outputFile=test-report.json && node generate-report.js",
+    "test:report": "jest --json --outputFile=test-report.json && node scripts/generate-report.js",
     "start": "node server.js",
     "dev": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first nodemon server.js",
+    "db:ping": "node scripts/test-db.js",
     "prepare": "husky || true"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=24",
+    "npm": ">=11"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",

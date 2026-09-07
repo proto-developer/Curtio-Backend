@@ -2,3 +2,8 @@
 node_modules
 *.log
 dict
+test-report.json
+test-report.txt
+test-report.html
+TEST_REPORT.md
+reports/
