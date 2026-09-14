@@ -12,6 +12,6 @@ npm-debug.log
 
 .husky
 tests
-test-db.js
+scripts
 test-report.json
 generate-report.js

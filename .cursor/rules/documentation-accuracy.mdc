@@ -1,0 +1,14 @@
+---
+description: Keep docs accurate; code and tests beat stale markdown
+globs: "**/*.{md,docx}"
+alwaysApply: false
+---
+
+# Documentation
+
+- Code and tests are the source of truth.
+- When docs and code disagree, follow code unless the user asked to change the contract.
+- Do not create new markdown files unless the user asked.
+- Verify paths, script names, env vars, and routes before documenting them.
+- Live API shape is typically `{ success, message, ... }` under `/api/auth`, `/api/urls`, and related modules — confirm in `src/` before documenting.
+- Frontend and backend share a dual-branch model (`main` = staging, `prod` = production). Do not document a casual `main` → `prod` merge as the promote path after rollbacks/restores.
