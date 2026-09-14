@@ -1,0 +1,23 @@
+---
+description: Core coding standards and production-ready bar for Curtio Backend
+alwaysApply: false
+---
+# Project standards
+
+- Follow existing repo conventions before introducing new patterns or libraries.
+- This repo is JavaScript (CommonJS). Do not convert files to TypeScript or ESM unless the user explicitly asks.
+- Prefer small, reusable functions over duplication. Keep controllers thin; put domain logic in modules/services.
+- Use async/await. Do not swallow errors — return consistent `{ success, message, ... }` style responses.
+- Do not remove or skip existing tests to make a change pass.
+- Never expose secrets or commit `.env` files.
+- Never push directly to `main` or `prod`. Day-to-day: branch → PR into `main` (staging). Production is a separate PR into `prod` only when explicitly requested — do not casually merge `main` → `prod`.
+- Keep product name **Curtio**. Do not reintroduce Brevly, Bravely, or brev.ly in API messages, emails, or new docs.
+
+## Production-ready bar
+
+Before considering a task complete:
+
+- Verify against running code and tests, not assumptions from outdated docs.
+- Check auth, validation, and negative paths (401/403/404/409).
+- Recommend or add Jest coverage if the change is untested.
+- Call out security risks (token handling, password hashing, open redirects, injection, rate limits).
